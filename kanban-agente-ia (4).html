@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kanban Agent · R&S</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,400;0,500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f0f2f7; --s1:#ffffff; --s2:#ffffff; --s3:#f4f6fb;
+  --border:rgba(0,0,0,0.08); --border2:rgba(0,0,0,0.15);
+  --text:#1a1f36; --muted:#9aa0b8; --muted2:#6b7494;
+  --accent:#3b6ef5; --accent2:#6c44f4;
+  --green:#16a34a; --amber:#d97706; --red:#dc2626; --pink:#db2777; --teal:#0d9488;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+body::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");pointer-events:none;z-index:0}
+.app{display:flex;flex-direction:column;height:100vh;position:relative;z-index:1}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:54px;background:rgba(255,255,255,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);flex-shrink:0;gap:16px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.logo-badge{background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:6px;padding:3px 8px;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#fff}
+.topbar-stats{display:flex;gap:16px}
+.tstat{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted2)}
+.tstat-val{font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:var(--text)}
+.topbar-right{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.agent-status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted2)}
+.sdot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background 0.3s}
+.sdot.active{background:var(--green);box-shadow:0 0 8px var(--green);animation:sp 2s ease infinite}
+.sdot.thinking{background:var(--accent);box-shadow:0 0 8px var(--accent);animation:sp 0.7s ease infinite}
+.sdot.running{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:sp 0.5s ease infinite}
+@keyframes sp{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* TABS */
+.tabs{display:flex;gap:2px;padding:0 24px;border-bottom:1px solid var(--border);flex-shrink:0;background:#fff}
+.tab{padding:10px 16px;font-size:12px;font-weight:500;color:var(--muted2);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;display:flex;align-items:center;gap:6px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* VIEWS */
+.view{display:none;flex:1;overflow:hidden}
+.view.active{display:flex}
+
+/* SHEETS MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);backdrop-filter:blur(6px);z-index:300;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.2s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{background:#fff;border:1px solid var(--border);border-radius:16px;width:520px;max-width:95vw;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,0.15);transform:translateY(16px);transition:transform 0.2s}
+.modal-overlay.open .modal{transform:translateY(0)}
+.modal-title{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.modal-sub{font-size:12px;color:var(--muted2);margin-bottom:22px;line-height:1.6}
+.modal-step{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#f4f6fb;border-radius:9px;margin-bottom:8px;font-size:12px;color:var(--muted2);line-height:1.6}
+.step-num{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.step-text strong{color:var(--text)}
+.step-text code{font-family:'DM Mono',monospace;font-size:10px;background:rgba(59,110,245,0.1);color:var(--accent);padding:1px 5px;border-radius:3px}
+.form-label{display:block;font-size:11px;font-weight:600;letter-spacing:0.4px;text-transform:uppercase;color:var(--muted2);margin:14px 0 5px}
+.form-input{width:100%;background:#f4f6fb;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);outline:none;transition:border-color 0.15s}
+.form-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,110,245,0.1)}
+.form-input::placeholder{color:var(--muted)}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.btn-ghost{background:none;border:1px solid var(--border2);border-radius:8px;padding:9px 16px;color:var(--muted2);font-family:'DM Sans';font-size:13px;cursor:pointer;transition:all 0.15s}
+.btn-ghost:hover{color:var(--text);border-color:var(--text)}
+.btn-confirm{background:var(--accent);border:none;border-radius:8px;padding:9px 18px;color:#fff;font-family:'DM Sans';font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:6px}
+.btn-confirm:hover{background:#2d5ce8}
+.btn-confirm:disabled{background:#c5d0f8;cursor:not-allowed}
+.sheets-bar{padding:6px 24px;background:#f0f4ff;border-bottom:1px solid rgba(59,110,245,0.15);display:none;align-items:center;gap:10px;font-size:11px;color:var(--muted2);flex-shrink:0}
+.sheets-bar.visible{display:flex}
+.sheets-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+.sheets-dot.syncing{background:var(--accent);animation:sp 0.7s ease infinite}
+.sheets-dot.error{background:var(--red)}
+.sheets-name{font-weight:600;color:var(--accent);cursor:pointer;text-decoration:underline;text-decoration-style:dotted}
+.sheets-name:hover{color:#2d5ce8}
+.sheets-sync-btn{margin-left:auto;font-size:11px;padding:3px 9px;border-radius:5px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'DM Sans';transition:background 0.15s}
+.sheets-sync-btn:hover{background:#2d5ce8}
+.btn-connect{font-size:11px;padding:5px 12px;border-radius:7px;background:#f0f4ff;border:1px solid rgba(59,110,245,0.3);color:var(--accent);cursor:pointer;font-family:'DM Sans';font-weight:500;transition:all 0.15s;display:flex;align-items:center;gap:5px}
+.btn-connect:hover{background:#e0e8ff;border-color:var(--accent)}
+.btn-connect.connected{background:#f0fdf4;border-color:rgba(22,163,74,0.3);color:var(--green)}
+
+/* BOARD */
+.board-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.board-scroll{overflow-x:auto;overflow-y:auto;flex:1;padding:18px 20px 32px}
+.board{display:flex;gap:11px;min-width:max-content;align-items:flex-start}
+
+/* METRICS */
+.metrics-view{flex:1;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:20px}
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:13px}
+.metric-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+.metric-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--mc)}
+.metric-label{font-size:10px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:var(--muted2);margin-bottom:8px}
+.metric-val{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:var(--text);line-height:1}
+.metric-sub{font-size:11px;color:var(--muted2);margin-top:6px}
+.metric-trend{font-size:11px;margin-top:4px}
+.trend-up{color:var(--green)} .trend-down{color:var(--red)}
+.section-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:11px;display:flex;align-items:center;gap:7px}
+.funnel-wrap{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+.funnel-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.funnel-label{font-size:11px;color:#6b7494;width:155px;flex-shrink:0;text-align:right}
+.funnel-bar-wrap{flex:1;background:#f0f2f7;border-radius:3px;height:20px;overflow:hidden}
+.funnel-bar{height:100%;border-radius:3px;display:flex;align-items:center;padding:0 7px;font-size:10px;font-weight:600;color:#fff;transition:width 0.8s cubic-bezier(0.4,0,0.2,1)}
+.funnel-num{font-size:11px;font-weight:700;color:var(--text);width:26px;flex-shrink:0}
+.bottleneck-list{display:flex;flex-direction:column;gap:8px}
+.bottleneck-item{background:#fff;border:1px solid var(--border);border-radius:8px;padding:13px;display:flex;align-items:center;gap:11px;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.bottleneck-item.critical{border-color:rgba(220,38,38,0.3);background:rgba(220,38,38,0.03)}
+.bottleneck-item.warning{border-color:rgba(217,119,6,0.3);background:rgba(217,119,6,0.03)}
+.bi-icon{font-size:18px;flex-shrink:0}
+.bi-info{flex:1}
+.bi-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px}
+.bi-desc{font-size:11px;color:var(--muted2);line-height:1.5}
+.bi-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;flex-shrink:0}
+.badge-red{background:rgba(239,68,68,0.15);color:#f87171}
+.badge-amber{background:rgba(245,158,11,0.15);color:#fbbf24}
+
+/* REPORT */
+.report-view{flex:1;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:14px}
+.report-header{background:#fff;border:1px solid var(--border);border-radius:12px;padding:22px;display:flex;align-items:center;justify-content:space-between;gap:16px;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+.report-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:3px}
+.report-date{font-size:12px;color:var(--muted2)}
+.report-actions{display:flex;gap:8px}
+.btn-outline{background:none;border:1px solid var(--border2);border-radius:7px;padding:8px 13px;color:#6b7494;font-family:'DM Sans';font-size:12px;cursor:pointer;transition:all 0.15s}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+.btn-primary{background:var(--accent);border:none;border-radius:7px;padding:8px 14px;color:#fff;font-family:'DM Sans';font-size:12px;cursor:pointer;transition:all 0.15s}
+.btn-primary:hover{background:#6690ff}
+.btn-primary:disabled{background:var(--s3);color:var(--muted);cursor:not-allowed}
+.report-body{background:#fff;border:1px solid var(--border);border-radius:12px;padding:22px;font-size:13px;line-height:1.8;color:var(--text);min-height:280px;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+.report-body h3{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;margin:14px 0 7px;color:var(--accent)}
+.report-body h3:first-child{margin-top:0}
+.report-body ul{padding-left:18px;margin:5px 0}
+.report-body li{margin-bottom:3px;color:#6b7494}
+.report-body li strong{color:var(--text)}
+.report-body p{color:#6b7494;margin-bottom:7px}
+.report-body .highlight{background:rgba(59,110,245,0.06);border:1px solid rgba(59,110,245,0.15);border-radius:6px;padding:9px 13px;margin:7px 0;font-size:12px}
+.report-placeholder{text-align:center;padding:50px 20px;color:var(--muted)}
+.report-placeholder-icon{font-size:36px;margin-bottom:10px;opacity:0.3}
+
+/* COLUMN */
+.column{width:213px;flex-shrink:0;display:flex;flex-direction:column;animation:colIn 0.3s ease both}
+@keyframes colIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.col-head{border-radius:9px 9px 0 0;background:#fff;border:1px solid var(--border);border-bottom:none;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;position:relative;overflow:hidden}
+.col-head::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--cc)}
+.col-head-left{display:flex;align-items:center;gap:6px}
+.col-icon{font-size:12px}
+.col-name{font-family:'Syne',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.3px;text-transform:uppercase;color:var(--text);line-height:1.3}
+.col-badge{font-family:'Syne',sans-serif;font-size:10px;font-weight:700;background:var(--cc);color:#fff;border-radius:12px;padding:1px 7px;min-width:18px;text-align:center}
+.col-body{background:#f4f6fb;border:1px solid var(--border);border-top:none;border-radius:0 0 9px 9px;padding:7px;min-height:90px;display:flex;flex-direction:column;gap:6px;transition:background 0.15s,border-color 0.15s}
+.column.drag-over .col-body{background:rgba(59,110,245,0.06);border-color:var(--accent)}
+
+/* CARD */
+.card{background:#fff;border:1px solid var(--border);border-radius:7px;padding:9px;cursor:grab;position:relative;overflow:hidden;transition:all 0.18s;animation:cardIn 0.25s ease both}
+@keyframes cardIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
+.card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--cc);border-radius:7px 0 0 7px}
+.card:hover{border-color:rgba(0,0,0,0.15);transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1)}
+.card.dragging{opacity:0.2;transform:rotate(2deg)}
+.card.agent-updated{border-color:var(--accent);box-shadow:0 0 14px rgba(59,110,245,0.25);animation:agentPing 0.7s ease}
+@keyframes agentPing{0%{box-shadow:0 0 0 0 rgba(59,110,245,0.5)}100%{box-shadow:0 0 0 14px rgba(59,110,245,0)}}
+.card-role{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:#1a1f36;margin-bottom:2px;line-height:1.4}
+.card-dept{font-size:10px;color:#6b7494;margin-bottom:7px}
+.card-tags{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px}
+.tag{font-size:9px;font-weight:500;padding:1px 5px;border-radius:3px;background:rgba(0,0,0,0.05);color:#6b7494;border:1px solid rgba(0,0,0,0.08);letter-spacing:0.3px}
+.tag.p-alta{background:rgba(220,38,38,0.08);color:#b91c1c;border-color:rgba(220,38,38,0.2)}
+.tag.p-media{background:rgba(217,119,6,0.08);color:#b45309;border-color:rgba(217,119,6,0.2)}
+.tag.p-baixa{background:rgba(22,163,74,0.08);color:#15803d;border-color:rgba(22,163,74,0.2)}
+.tag.remote{background:rgba(59,110,245,0.08);color:#2563eb;border-color:rgba(59,110,245,0.2)}
+.tag.hybrid{background:rgba(108,68,244,0.08);color:#7c3aed;border-color:rgba(108,68,244,0.2)}
+.tag.onsite{background:rgba(219,39,119,0.08);color:#be185d;border-color:rgba(219,39,119,0.2)}
+.card-foot{display:flex;align-items:center;justify-content:space-between}
+.card-date{font-size:10px;color:#9aa0b8;display:flex;align-items:center;gap:3px}
+.card-cands{font-size:10px;color:#9aa0b8;display:flex;align-items:center;gap:3px}
+.av-stack{display:flex}
+.av{width:15px;height:15px;border-radius:50%;margin-left:-3px;border:1.5px solid #fff;font-size:6px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center}
+.av:first-child{margin-left:0}
+.empty-col{text-align:center;padding:13px 6px;color:var(--muted);font-size:10px}
+
+/* AGENT PANEL */
+.agent-panel{width:355px;flex-shrink:0;border-left:1px solid var(--border);background:#fff;display:flex;flex-direction:column;overflow:hidden}
+.agent-head{padding:13px 15px 11px;border-bottom:1px solid var(--border);flex-shrink:0;background:#fff}
+.agent-title{font-family:'Syne',sans-serif;font-weight:800;font-size:13px;display:flex;align-items:center;gap:7px;margin-bottom:2px}
+.agent-sub{font-size:11px;color:var(--muted2)}
+
+/* NEXT RUN */
+.next-run-bar{padding:7px 15px;border-bottom:1px solid var(--border);background:rgba(59,110,245,0.04);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.nr-label{font-size:10px;color:var(--muted2);display:flex;align-items:center;gap:5px}
+.nr-timer{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);font-weight:500}
+.nr-run-btn{font-size:10px;padding:3px 9px;border-radius:5px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'DM Sans';transition:background 0.15s}
+.nr-run-btn:hover{background:#6690ff}
+
+/* QUICK */
+.quick-actions{padding:9px 13px;border-bottom:1px solid var(--border);flex-shrink:0}
+.qa-label{font-size:10px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.qa-grid{display:flex;flex-wrap:wrap;gap:4px}
+.qa-chip{font-size:11px;padding:4px 9px;border-radius:6px;background:#f4f6fb;border:1px solid var(--border);color:var(--muted2);cursor:pointer;transition:all 0.15s}
+.qa-chip:hover{background:#e8ecf8;border-color:var(--accent);color:var(--accent)}
+
+/* MESSAGES */
+.messages{flex:1;overflow-y:auto;padding:11px 13px;display:flex;flex-direction:column;gap:9px}
+.msg{display:flex;flex-direction:column;gap:3px;animation:msgIn 0.22s ease}
+@keyframes msgIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.msg-user{align-items:flex-end}
+.msg-agent{align-items:flex-start}
+.msg-bubble{max-width:92%;padding:9px 12px;border-radius:10px;font-size:12.5px;line-height:1.6}
+.msg-user .msg-bubble{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:10px 10px 3px 10px}
+.msg-agent .msg-bubble{background:#f4f6fb;border:1px solid var(--border);color:var(--text);border-radius:3px 10px 10px 10px}
+.msg-agent .msg-bubble.thinking{display:flex;align-items:center;gap:8px;color:var(--muted2)}
+.think-dots{display:flex;gap:3px}
+.td{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:tdot 1.1s ease infinite}
+.td:nth-child(2){animation-delay:.18s}
+.td:nth-child(3){animation-delay:.36s}
+@keyframes tdot{0%,80%,100%{transform:scale(0.5);opacity:0.35}40%{transform:scale(1);opacity:1}}
+.msg-meta{font-size:10px;color:var(--muted);padding:0 4px}
+.action-log{margin-top:7px;display:flex;flex-direction:column;gap:4px}
+.action-item{display:flex;align-items:flex-start;gap:6px;background:rgba(59,110,245,0.06);border:1px solid rgba(59,110,245,0.15);border-radius:6px;padding:6px 9px;font-size:11px;color:var(--muted2)}
+.action-icon{flex-shrink:0;font-size:12px;margin-top:1px}
+.action-text strong{color:var(--text);font-weight:600}
+
+/* INPUT */
+.input-area{padding:11px 13px;border-top:1px solid var(--border);background:#fff;flex-shrink:0}
+.input-wrap{display:flex;gap:7px;align-items:flex-end;background:#f4f6fb;border:1px solid var(--border);border-radius:9px;padding:8px 10px;transition:border-color 0.15s}
+.input-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,110,245,0.1)}
+.chat-input{flex:1;background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12.5px;color:var(--text);resize:none;max-height:90px;min-height:18px;line-height:1.5}
+.chat-input::placeholder{color:var(--muted)}
+.send-btn{width:29px;height:29px;border-radius:7px;background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s;color:#fff}
+.send-btn:hover{background:#6690ff;transform:scale(1.05)}
+.send-btn:disabled{background:var(--s3);color:var(--muted);cursor:not-allowed;transform:none}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;z-index:500;background:#fff;border:1px solid var(--accent);border-radius:10px;padding:11px 14px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);box-shadow:0 8px 32px rgba(0,0,0,0.12),0 0 20px rgba(59,110,245,0.1);transform:translateY(80px);opacity:0;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);max-width:290px}
+.toast.show{transform:translateY(0);opacity:1}
+.toast-icon{font-size:15px;flex-shrink:0}
+
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.12);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.2)}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="logo">Talent Board <span class="logo-badge">AI Agent</span></div>
+    <div class="topbar-stats">
+      <div class="tstat"><span class="tstat-val" id="t-active">0</span>&nbsp;ativas</div>
+      <div class="tstat"><span class="tstat-val" id="t-pipeline">0</span>&nbsp;pipeline</div>
+      <div class="tstat"><span class="tstat-val" id="t-hired">0</span>&nbsp;contratadas</div>
+      <div class="tstat"><span class="tstat-val" id="t-ttr" style="color:var(--amber)">—</span>&nbsp;dias méd.</div>
+      <div class="tstat"><span class="tstat-val" id="t-conv" style="color:var(--teal)">—</span>&nbsp;conversão</div>
+    </div>
+    <div class="topbar-right">
+      <button class="btn-connect" id="btn-connect" onclick="openSheetsModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M3 9h18M9 9v12" stroke="currentColor" stroke-width="1.8"/></svg>
+        <span id="connect-label">Conectar Google Sheets</span>
+      </button>
+      <div class="agent-status"><div class="sdot active" id="sdot"></div><span id="stext">Agente ativo</span></div>
+    </div>
+  </div>
+
+  <!-- SHEETS STATUS BAR -->
+  <div class="sheets-bar" id="sheets-bar">
+    <div class="sheets-dot" id="sheets-dot"></div>
+    <span>Google Sheets conectado:</span>
+    <span class="sheets-name" id="sheets-name" onclick="openSheetsModal()">—</span>
+    <span class="sheets-sep">·</span>
+    <span id="sheets-last-sync">Nunca sincronizado</span>
+    <button class="sheets-sync-btn" onclick="syncFromSheets(true)">↻ Sincronizar agora</button>
+  </div>
+
+  <!-- SHEETS MODAL -->
+  <div class="modal-overlay" id="sheets-modal" onclick="handleModalClick(event)">
+    <div class="modal">
+      <div class="modal-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="#16a34a" stroke-width="1.8"/><path d="M3 9h18M9 9v12" stroke="#16a34a" stroke-width="1.8"/></svg>
+        Conectar Google Sheets
+      </div>
+      <div class="modal-sub">Siga os 3 passos abaixo para conectar sua planilha de vagas ao Kanban. Os dados serão sincronizados automaticamente.</div>
+
+      <div class="modal-step">
+        <div class="step-num">1</div>
+        <div class="step-text">Abra sua planilha no Google Sheets. No menu, clique em <strong>Arquivo → Compartilhar → Publicar na web</strong>.</div>
+      </div>
+      <div class="modal-step">
+        <div class="step-num">2</div>
+        <div class="step-text">Escolha a aba com as vagas, selecione o formato <strong>Valores separados por vírgula (.csv)</strong> e clique em <strong>Publicar</strong>.</div>
+      </div>
+      <div class="modal-step">
+        <div class="step-num">3</div>
+        <div class="step-text">Copie o link gerado e cole abaixo. Ele termina com <code>/pub?output=csv</code>.</div>
+      </div>
+
+      <label class="form-label">Link CSV da planilha</label>
+      <input class="form-input" id="sheets-url-input" type="url"
+        placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv">
+
+      <div style="margin-top:14px;padding:10px 13px;background:#fffbeb;border:1px solid rgba(217,119,6,0.2);border-radius:8px;font-size:11px;color:#92400e;line-height:1.6">
+        <strong>📋 Colunas esperadas na planilha (na ordem):</strong><br>
+        <code style="font-family:'DM Mono',monospace;font-size:10px">cargo | departamento | nivel | prioridade | modalidade | gestor | prazo | etapa | candidatos</code><br>
+        <span style="color:#b45309">A primeira linha deve ser o cabeçalho. Baixe o modelo abaixo.</span>
+      </div>
+
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+        <a id="download-template" href="#" onclick="downloadTemplate(event)"
+          style="font-size:11px;color:var(--accent);text-decoration:underline;cursor:pointer">
+          ⬇ Baixar planilha modelo (.csv)
+        </a>
+      </div>
+
+      <div class="form-label" style="margin-top:14px">Intervalo de sincronização</div>
+      <select class="form-input" id="sheets-interval" style="height:38px">
+        <option value="0">Manual (somente quando clicar em Sincronizar)</option>
+        <option value="5">A cada 5 minutos</option>
+        <option value="15" selected>A cada 15 minutos</option>
+        <option value="60">A cada 1 hora</option>
+      </select>
+
+      <div id="sheets-test-result" style="margin-top:10px;display:none;padding:10px 13px;border-radius:8px;font-size:12px"></div>
+
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeSheetsModal()">Cancelar</button>
+        <button class="btn-ghost" onclick="testConnection()" style="border-color:rgba(59,110,245,0.3);color:var(--accent)">🔍 Testar conexão</button>
+        <button class="btn-confirm" id="btn-save-sheets" onclick="saveSheets()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Conectar e sincronizar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('board',this)">📋 Kanban</div>
+    <div class="tab" onclick="switchTab('metrics',this)">📊 Métricas</div>
+    <div class="tab" onclick="switchTab('report',this)">📄 Relatório</div>
+  </div>
+
+  <!-- ── BOARD ── -->
+  <div class="view active" id="view-board">
+    <div class="board-area">
+      <div class="board-scroll"><div class="board" id="board"></div></div>
+    </div>
+    <div class="agent-panel">
+      <div class="agent-head">
+        <div class="agent-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="var(--accent)" stroke-width="1.5"/><path d="M12 7v5l3 3" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Agente de Recrutamento
+        </div>
+        <div class="agent-sub">📋 Lê vagas · 🔄 Atualiza Kanban · 📊 Métricas · 🚧 Gargalos · 📄 Relatórios</div>
+      </div>
+      <div class="next-run-bar">
+        <div class="nr-label">
+          ⏰ Próx. ciclo diário (08h): <span class="nr-timer" id="countdown">--:--:--</span>
+        </div>
+        <button class="nr-run-btn" onclick="runDailyUpdate()">▶ Rodar agora</button>
+      </div>
+      <div class="quick-actions">
+        <div class="qa-label">⚡ Ações rápidas</div>
+        <div class="qa-grid">
+          <div class="qa-chip" onclick="sendQuick('Leia a base de vagas e mostre um resumo completo do pipeline atual')">📋 Ler base</div>
+          <div class="qa-chip" onclick="sendQuick('Atualize o Kanban: sinalize vagas paradas e mova as que podem avançar de etapa')">🔄 Atualizar</div>
+          <div class="qa-chip" onclick="sendQuick('Calcule todas as métricas: tempo médio por etapa, taxa de conversão, SLA e eficiência')">📊 Métricas</div>
+          <div class="qa-chip" onclick="sendQuick('Identifique todos os gargalos do pipeline com impacto e recomendação de ação')">🚧 Gargalos</div>
+          <div class="qa-chip" onclick="runDailyUpdate()">📅 Ciclo diário</div>
+          <div class="qa-chip" onclick="sendQuick('Quais vagas têm prazo vencendo nos próximos 7 dias? Liste com prioridade')">⏰ Prazos</div>
+        </div>
+      </div>
+      <div class="messages" id="messages"></div>
+      <div class="input-area">
+        <div class="input-wrap">
+          <textarea class="chat-input" id="chat-input" placeholder="Ex: Calcule métricas, mova DevOps para divulgação..." rows="1"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── METRICS ── -->
+  <div class="view" id="view-metrics" style="flex-direction:column">
+    <div class="metrics-view">
+      <div class="metrics-grid" id="metrics-grid"></div>
+      <div>
+        <div class="section-title">📉 Funil do Pipeline</div>
+        <div class="funnel-wrap" id="funnel-wrap"></div>
+      </div>
+      <div>
+        <div class="section-title">🚧 Gargalos Identificados</div>
+        <div class="bottleneck-list" id="bottleneck-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── REPORT ── -->
+  <div class="view" id="view-report" style="flex-direction:column">
+    <div class="report-view">
+      <div class="report-header">
+        <div>
+          <div class="report-title">Relatório Periódico de R&S</div>
+          <div class="report-date" id="report-date">Gerado em: —</div>
+        </div>
+        <div class="report-actions">
+          <button class="btn-outline" onclick="copyReport()">📋 Copiar</button>
+          <button class="btn-primary" id="gen-btn" onclick="generateReport()">🤖 Gerar com IA</button>
+        </div>
+      </div>
+      <div class="report-body" id="report-body">
+        <div class="report-placeholder">
+          <div class="report-placeholder-icon">📄</div>
+          <div>Clique em <strong>"Gerar com IA"</strong> para o agente analisar todo o pipeline<br>e produzir o relatório periódico completo com insights e recomendações.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<div class="toast" id="toast"><span class="toast-icon" id="toast-icon">🤖</span><span id="toast-msg"></span></div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+const COLS=[
+  {id:'vaga-aberta',       label:'Vaga Aberta',         icon:'📋',color:'#3b82f6'},
+  {id:'vaga-aprovada',     label:'Vaga Aprovada',       icon:'✅',color:'#22c55e'},
+  {id:'divulgacao',        label:'Divulgação/Hunting',  icon:'📣',color:'#f59e0b'},
+  {id:'triagem',           label:'Triagem Currículos',  icon:'🔍',color:'#ec4899'},
+  {id:'entrevista-rh',     label:'Entrevista RH',       icon:'💬',color:'#8b5cf6'},
+  {id:'entrevista-gestor', label:'Entrevista Gestor',   icon:'👤',color:'#06b6d4'},
+  {id:'avaliacao-tecnica', label:'Avaliação Técnica',   icon:'🧪',color:'#f97316'},
+  {id:'entrevista-par',    label:'Entrevista Par',      icon:'🤝',color:'#14b8a6'},
+  {id:'bar-raiser',        label:'Bar Raiser',          icon:'⭐',color:'#a855f7'},
+  {id:'comite',            label:'Comitê',              icon:'🏛️',color:'#eab308'},
+  {id:'proposta',          label:'Proposta',            icon:'📨',color:'#10b981'},
+  {id:'contratacao',       label:'Contratação',         icon:'🎉',color:'#22c55e'},
+  {id:'congelada',         label:'Congelada/Cancelada', icon:'❄️',color:'#6b7280'},
+];
+function daysAgo(n){const d=new Date();d.setDate(d.getDate()-n);return d.toISOString()}
+function daysSince(iso){return Math.floor((Date.now()-new Date(iso))/86400000)}
+function fmtDate(iso){if(!iso)return'—';return new Date(iso).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}
+const modeMap={remote:'Remoto',hybrid:'Híbrido',onsite:'Presencial'};
+const priMap={alta:'🔴 Alta',media:'🟡 Média',baixa:'🟢 Baixa'};
+const avColors=['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4','#f97316'];
+
+let cards=[
+  {id:1, role:'Engenheiro(a) de Software Sênior',dept:'Engenharia',      level:'Sênior',     priority:'alta', mode:'remote',manager:'Carlos Mendes',  deadline:'2025-04-15',col:'entrevista-rh',    candidates:3, updatedAt:daysAgo(2), daysInStage:2},
+  {id:2, role:'Product Designer',               dept:'Produto',           level:'Pleno',      priority:'media',mode:'hybrid',manager:'Ana Lima',        deadline:'2025-04-30',col:'triagem',          candidates:7, updatedAt:daysAgo(5), daysInStage:5},
+  {id:3, role:'Analista de Dados',              dept:'Data & Analytics',  level:'Pleno',      priority:'alta', mode:'remote',manager:'Rafael Costa',    deadline:'2025-03-31',col:'entrevista-gestor',candidates:2, updatedAt:daysAgo(1), daysInStage:1},
+  {id:4, role:'Tech Lead Back-end',             dept:'Engenharia',        level:'Especialista',priority:'alta',mode:'hybrid',manager:'Mariana Souza',   deadline:'2025-04-20',col:'avaliacao-tecnica',candidates:1, updatedAt:daysAgo(3), daysInStage:3},
+  {id:5, role:'Gerente de Marketing',           dept:'Marketing',         level:'Gerente',    priority:'media',mode:'onsite',manager:'Pedro Alves',     deadline:'2025-05-10',col:'vaga-aberta',      candidates:0, updatedAt:daysAgo(10),daysInStage:10},
+  {id:6, role:'Desenvolvedor(a) Mobile',        dept:'Engenharia',        level:'Sênior',     priority:'alta', mode:'remote',manager:'Fernanda Ramos',  deadline:'2025-04-05',col:'proposta',         candidates:1, updatedAt:daysAgo(0), daysInStage:1},
+  {id:7, role:'Analista de RH',                 dept:'Pessoas & Cultura', level:'Júnior',     priority:'baixa',mode:'hybrid',manager:'Luciana Neves',   deadline:'2025-05-20',col:'divulgacao',       candidates:12,updatedAt:daysAgo(4), daysInStage:4},
+  {id:8, role:'Arquiteto(a) de Soluções',       dept:'Engenharia',        level:'Especialista',priority:'alta',mode:'remote',manager:'Thiago Ferreira', deadline:'2025-04-10',col:'bar-raiser',       candidates:1, updatedAt:daysAgo(1), daysInStage:1},
+  {id:9, role:'UX Researcher',                  dept:'Produto',           level:'Pleno',      priority:'media',mode:'remote',manager:'Camila Dias',     deadline:'2025-05-01',col:'entrevista-par',   candidates:2, updatedAt:daysAgo(8), daysInStage:8},
+  {id:10,role:'Coordenador(a) Financeiro',      dept:'Financeiro',        level:'Pleno',      priority:'media',mode:'onsite',manager:'Roberto Maia',    deadline:'2025-04-25',col:'comite',           candidates:1, updatedAt:daysAgo(0), daysInStage:2},
+  {id:11,role:'DevOps Engineer',                dept:'Infraestrutura',    level:'Sênior',     priority:'alta', mode:'remote',manager:'Carlos Mendes',   deadline:'2025-03-28',col:'vaga-aprovada',    candidates:0, updatedAt:daysAgo(7), daysInStage:7},
+  {id:12,role:'Designer Gráfico',               dept:'Marketing',         level:'Júnior',     priority:'baixa',mode:'hybrid',manager:'Ana Lima',        deadline:'2025-06-01',col:'congelada',        candidates:0, updatedAt:daysAgo(15),daysInStage:15},
+  {id:13,role:'Cientista de Dados',             dept:'Data & Analytics',  level:'Sênior',     priority:'alta', mode:'remote',manager:'Rafael Costa',    deadline:'2025-04-18',col:'contratacao',      candidates:1, updatedAt:daysAgo(0), daysInStage:0},
+  {id:14,role:'Analista de Segurança',          dept:'Segurança',         level:'Pleno',      priority:'media',mode:'hybrid',manager:'Thiago Ferreira', deadline:'2025-05-05',col:'triagem',          candidates:5, updatedAt:daysAgo(9), daysInStage:9},
+];
+let nextId=15;
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+function switchTab(name,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  if(name==='metrics') renderMetrics();
+}
+
+// ── BOARD ─────────────────────────────────────────────────────────────────────
+function renderBoard(){
+  const board=document.getElementById('board');
+  board.innerHTML='';
+  let active=0,pipeline=0,hired=0;
+  COLS.forEach((col,ci)=>{
+    const cc=cards.filter(c=>c.col===col.id);
+    if(col.id!=='congelada') active+=cc.length;
+    if(!['vaga-aberta','vaga-aprovada','contratacao','congelada'].includes(col.id)) pipeline+=cc.length;
+    if(col.id==='contratacao') hired+=cc.length;
+    const el=document.createElement('div');
+    el.className='column'; el.dataset.col=col.id;
+    el.style.animationDelay=`${ci*0.03}s`;
+    el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('drag-over')});
+    el.addEventListener('dragleave',()=>el.classList.remove('drag-over'));
+    el.addEventListener('drop',e=>{
+      e.preventDefault();el.classList.remove('drag-over');
+      if(window._dragId){const c=cards.find(x=>x.id===window._dragId);if(c&&c.col!==col.id){c.col=col.id;c.updatedAt=new Date().toISOString();c.daysInStage=0;renderBoard();}}
+    });
+    el.innerHTML=`<div class="col-head" style="--cc:${col.color}"><div class="col-head-left"><span class="col-icon">${col.icon}</span><span class="col-name">${col.label}</span></div><span class="col-badge" style="background:${col.color}">${cc.length}</span></div><div class="col-body" style="--cc:${col.color}">${cc.length===0?'<div class="empty-col">○ Vazio</div>':''}</div>`;
+    const body=el.querySelector('.col-body');
+    cc.forEach(card=>{
+      const cardEl=document.createElement('div');
+      cardEl.className='card'; cardEl.id=`card-${card.id}`;
+      cardEl.style.setProperty('--cc',col.color); cardEl.draggable=true;
+      const avs=card.candidates>0?Array.from({length:Math.min(card.candidates,3)}).map((_,i)=>`<div class="av" style="background:${avColors[i%avColors.length]}">${String.fromCharCode(65+i)}</div>`).join('')+(card.candidates>3?`<div class="av" style="background:#374151">+${card.candidates-3}</div>`:''):'';
+      const warn=card.daysInStage>7&&!['congelada','contratacao'].includes(col.id)?`<span class="tag" style="background:rgba(239,68,68,0.1);color:#f87171;border-color:rgba(239,68,68,0.2)">⚠️ ${card.daysInStage}d</span>`:'';
+      cardEl.innerHTML=`<div class="card-role">${card.role}</div><div class="card-dept">${card.dept} · ${card.level}</div><div class="card-tags"><span class="tag p-${card.priority}">${priMap[card.priority]||card.priority}</span><span class="tag ${card.mode}">${modeMap[card.mode]||card.mode}</span>${warn}</div><div class="card-foot"><div class="card-date">📅 ${fmtDate(card.deadline)}</div><div class="card-cands"><div class="av-stack">${avs}</div>&nbsp;${card.candidates}</div></div>`;
+      cardEl.addEventListener('dragstart',()=>{window._dragId=card.id;cardEl.classList.add('dragging')});
+      cardEl.addEventListener('dragend',()=>cardEl.classList.remove('dragging'));
+      body.appendChild(cardEl);
+    });
+    board.appendChild(el);
+  });
+  const m=calcMetrics();
+  document.getElementById('t-active').textContent=active;
+  document.getElementById('t-pipeline').textContent=pipeline;
+  document.getElementById('t-hired').textContent=hired;
+  document.getElementById('t-ttr').textContent=m.avgDays+'d';
+  document.getElementById('t-conv').textContent=m.convRate+'%';
+}
+
+// ── METRICS CALC ─────────────────────────────────────────────────────────────
+function calcMetrics(){
+  const active=cards.filter(c=>c.col!=='congelada');
+  const inPipeline=active.filter(c=>!['vaga-aberta','vaga-aprovada','contratacao'].includes(c.col));
+  const hired=cards.filter(c=>c.col==='contratacao');
+  const frozen=cards.filter(c=>c.col==='congelada');
+  const stale=active.filter(c=>c.daysInStage>7&&!['contratacao'].includes(c.col));
+  const highPri=active.filter(c=>c.priority==='alta');
+  const totalCands=active.reduce((s,c)=>s+c.candidates,0);
+  const avgDays=inPipeline.length?Math.round(inPipeline.reduce((s,c)=>s+(c.daysInStage||0),0)/inPipeline.length):0;
+  const started=cards.filter(c=>!['vaga-aberta','vaga-aprovada'].includes(c.col));
+  const convRate=started.length?Math.round((hired.length/started.length)*100):0;
+  const urgency=active.filter(c=>{if(!c.deadline)return false;const d=new Date(c.deadline);return(d-Date.now())/86400000<7});
+  const funnel=COLS.filter(c=>!['vaga-aberta','vaga-aprovada','congelada'].includes(c.id)).map(c=>({label:c.label,icon:c.icon,color:c.color,count:cards.filter(x=>x.col===c.id).length}));
+  const maxF=Math.max(...funnel.map(f=>f.count),1);
+  const bottlenecks=COLS.map(col=>{
+    const cc=cards.filter(c=>c.col===col.id&&!['congelada','contratacao'].includes(col.id));
+    if(!cc.length)return null;
+    const avgD=Math.round(cc.reduce((s,c)=>s+(c.daysInStage||0),0)/cc.length);
+    return{col,cc,avgD};
+  }).filter(b=>b&&(b.cc.length>2||b.avgD>6)).sort((a,b)=>b.avgD-a.avgD).slice(0,5);
+  return{active,inPipeline,hired,frozen,stale,highPri,totalCands,avgDays,convRate,urgency,funnel,maxF,bottlenecks};
+}
+
+// ── RENDER METRICS ───────────────────────────────────────────────────────────
+function renderMetrics(){
+  const m=calcMetrics();
+  const grid=document.getElementById('metrics-grid');
+  const defs=[
+    {label:'Vagas Ativas',     val:m.active.length,     sub:'excluindo congeladas',  color:'#3b82f6',trend:null},
+    {label:'Em Pipeline',      val:m.inPipeline.length, sub:'etapas de seleção',     color:'#8b5cf6',trend:null},
+    {label:'Contratações',     val:m.hired.length,      sub:'concluídas',            color:'#22c55e',trend:'up'},
+    {label:'Congeladas',       val:m.frozen.length,     sub:'pausadas/canceladas',   color:'#6b7280',trend:null},
+    {label:'Vagas Atrasadas',  val:m.stale.length,      sub:'>7 dias sem mover',     color:'#ef4444',trend:m.stale.length>2?'down':null},
+    {label:'Alta Prioridade',  val:m.highPri.length,    sub:'atenção imediata',      color:'#f59e0b',trend:null},
+    {label:'Prazo Crítico',    val:m.urgency.length,    sub:'vencem em <7 dias',     color:'#ec4899',trend:m.urgency.length>0?'down':null},
+    {label:'Total Candidatos', val:m.totalCands,        sub:'em avaliação',          color:'#14b8a6',trend:null},
+    {label:'Dias Médio/Etapa', val:m.avgDays+'d',       sub:'tempo médio parado',    color:'#f97316',trend:m.avgDays>5?'down':null},
+    {label:'Taxa Conversão',   val:m.convRate+'%',      sub:'vagas → contratação',   color:'#10b981',trend:m.convRate>20?'up':null},
+  ];
+  grid.innerHTML=defs.map(d=>`<div class="metric-card" style="--mc:${d.color}"><div class="metric-label">${d.label}</div><div class="metric-val" style="color:${d.color}">${d.val}</div><div class="metric-sub">${d.sub}</div>${d.trend?`<div class="metric-trend ${d.trend==='up'?'trend-up':'trend-down'}">${d.trend==='up'?'↑ Positivo':'↓ Atenção'}</div>`:''}</div>`).join('');
+  document.getElementById('funnel-wrap').innerHTML=m.funnel.map(f=>`<div class="funnel-row"><div class="funnel-label">${f.icon} ${f.label}</div><div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${f.count?Math.max((f.count/m.maxF)*100,4):0}%;background:${f.color}">${f.count>0?f.count:''}</div></div><div class="funnel-num">${f.count}</div></div>`).join('');
+  const bl=document.getElementById('bottleneck-list');
+  if(!m.bottlenecks.length){bl.innerHTML='<div class="bottleneck-item"><span class="bi-icon">✅</span><div class="bi-info"><div class="bi-title">Nenhum gargalo crítico</div><div class="bi-desc">Pipeline fluindo normalmente.</div></div></div>';return;}
+  bl.innerHTML=m.bottlenecks.map(b=>{const sev=b.avgD>8||b.cc.length>3?'critical':'warning';return`<div class="bottleneck-item ${sev}"><span class="bi-icon">${sev==='critical'?'🚨':'⚠️'}</span><div class="bi-info"><div class="bi-title">${b.col.icon} ${b.col.label}</div><div class="bi-desc">${b.cc.length} vaga${b.cc.length>1?'s':''} · média ${b.avgD} dias · ${b.cc.filter(c=>c.priority==='alta').length} de alta prioridade</div></div><span class="bi-badge ${sev==='critical'?'badge-red':'badge-amber'}">${sev==='critical'?'Crítico':'Alerta'}</span></div>`}).join('');
+}
+
+// ── GENERATE REPORT ───────────────────────────────────────────────────────────
+async function generateReport(){
+  const btn=document.getElementById('gen-btn');
+  btn.disabled=true; btn.textContent='⏳ Gerando...';
+  document.getElementById('report-body').innerHTML=`<div style="display:flex;align-items:center;gap:10px;color:var(--muted2);font-size:13px"><div class="think-dots"><div class="td"></div><div class="td"></div><div class="td"></div></div> O agente está analisando o pipeline completo...</div>`;
+  document.getElementById('report-date').textContent='Gerado em: '+new Date().toLocaleString('pt-BR');
+  const m=calcMetrics();
+  const payload={resumo:{vagas_ativas:m.active.length,em_pipeline:m.inPipeline.length,contratacoes:m.hired.length,congeladas:m.frozen.length,atrasadas:m.stale.length,prazo_critico:m.urgency.length,candidatos_total:m.totalCands,dias_medio_etapa:m.avgDays,taxa_conversao:m.convRate+'%'},vagas_por_etapa:COLS.map(c=>({etapa:c.label,total:cards.filter(x=>x.col===c.id).length,vagas:cards.filter(x=>x.col===c.id).map(x=>({cargo:x.role,dept:x.dept,prioridade:x.priority,dias_na_etapa:x.daysInStage,candidatos:x.candidates}))})).filter(c=>c.total>0),gargalos:m.bottlenecks.map(b=>({etapa:b.col.label,vagas:b.cc.length,media_dias:b.avgD})),atrasadas:m.stale.map(c=>({cargo:c.role,etapa:COLS.find(x=>x.id===c.col)?.label,dias:c.daysInStage,prioridade:c.priority})),urgencia:m.urgency.map(c=>({cargo:c.role,prazo:fmtDate(c.deadline),etapa:COLS.find(x=>x.id===c.col)?.label}))};
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:`Você é especialista em RH e R&S. Gere um relatório periódico executivo em português do Brasil usando HTML simples (h3, p, ul, li, strong, div class="highlight"). Estruture em: 1. Resumo Executivo, 2. Status do Pipeline, 3. Métricas de Recrutamento, 4. Alertas e Gargalos, 5. Vagas em Atenção, 6. Recomendações Estratégicas. Seja orientado a dados e acionável. Retorne APENAS o HTML do corpo sem tags html/body/head.`,messages:[{role:'user',content:`Gere o relatório com base neste estado:\n${JSON.stringify(payload,null,2)}`}]})});
+    const data=await res.json();
+    const html=data.content?.find(b=>b.type==='text')?.text||'Erro ao gerar relatório.';
+    document.getElementById('report-body').innerHTML=html;
+  }catch(e){document.getElementById('report-body').innerHTML=`<p style="color:var(--red)">Erro: ${e.message}</p>`;}
+  btn.disabled=false; btn.textContent='🤖 Gerar com IA';
+}
+function copyReport(){navigator.clipboard.writeText(document.getElementById('report-body').innerText).then(()=>showToast('📋','Relatório copiado!'))}
+
+// ── DAILY CYCLE ───────────────────────────────────────────────────────────────
+async function runDailyUpdate(){
+  setStatus('running','Ciclo diário...');
+  addMsg('agent','<strong>📅 Ciclo diário iniciado.</strong> Executando as 5 responsabilidades do agente...');
+  await sleep(600);
+
+  // 1 – Ler base
+  const total=cards.filter(c=>c.col!=='congelada').length;
+  addMsg('agent',`<strong>1️⃣ Base de vagas lida.</strong> ${total} vagas ativas encontradas · ${cards.length} total na base.`);
+  await sleep(800);
+
+  // 2 – Atualizar Kanban
+  const stale=cards.filter(c=>c.daysInStage>7&&!['congelada','contratacao'].includes(c.col)&&c.priority==='alta');
+  const a2=stale.map(c=>({icon:'⚠️',text:`<strong>${c.role}</strong> — ${c.daysInStage}d em <strong>${COLS.find(x=>x.id===c.col)?.label}</strong>. Gestor notificado.`}));
+  addMsg('agent',`<strong>2️⃣ Kanban atualizado.</strong> ${stale.length} vaga${stale.length!==1?'s':''} de alta prioridade sinalizada${stale.length!==1?'s':''} por inatividade.`,a2);
+  renderBoard(); await sleep(800);
+
+  // 3 – Métricas
+  const m=calcMetrics();
+  addMsg('agent',`<strong>3️⃣ Métricas calculadas:</strong><br>• ${m.active.length} vagas ativas · ${m.inPipeline.length} em seleção<br>• ${m.totalCands} candidatos · ${m.avgDays}d médios por etapa<br>• ${m.convRate}% taxa de conversão · ${m.stale.length} atrasadas`);
+  await sleep(800);
+
+  // 4 – Gargalos
+  const bots=m.bottlenecks;
+  const a4=bots.map(b=>({icon:b.avgD>8?'🚨':'⚠️',text:`<strong>${b.col.label}</strong>: ${b.cc.length} vaga${b.cc.length>1?'s':''}, média ${b.avgD} dias → ${b.avgD>8?'CRÍTICO':'Alerta'}`}));
+  addMsg('agent',`<strong>4️⃣ ${bots.length} gargalo${bots.length!==1?'s':''} identificado${bots.length!==1?'s':''}.</strong>${bots.length===0?' Pipeline fluindo bem.':''}`,a4);
+  await sleep(800);
+
+  // 5 – AI Summary
+  addMsg('agent','<strong>5️⃣ Gerando sumário do relatório periódico...</strong>');
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:350,system:'Você é um agente de RH. Gere um sumário executivo em 3-4 frases em português do Brasil. Destaque o ponto mais crítico e dê uma recomendação imediata e prática. Seja direto.',messages:[{role:'user',content:`Pipeline: ${m.active.length} vagas ativas, ${m.inPipeline.length} em seleção, ${m.stale.length} atrasadas, ${m.hired.length} contratadas, ${m.convRate}% conversão, ${m.urgency.length} com prazo crítico. Gargalos: ${bots.map(b=>b.col.label+'('+b.avgD+'d)').join(', ')||'nenhum crítico'}.`}]})});
+    const data=await res.json();
+    const txt=data.content?.find(b=>b.type==='text')?.text||'Ciclo concluído com sucesso.';
+    const msgs=document.getElementById('messages');
+    if(msgs.lastElementChild) msgs.lastElementChild.remove();
+    addMsg('agent','<strong>5️⃣ Sumário do relatório:</strong><br><br>'+txt);
+  }catch(e){
+    const msgs=document.getElementById('messages');
+    if(msgs.lastElementChild) msgs.lastElementChild.remove();
+    addMsg('agent','<strong>5️⃣ Ciclo concluído.</strong> Acesse a aba Relatório para o documento completo.');
+  }
+  setStatus('active','Agente ativo');
+  showToast('✅','Ciclo diário concluído!');
+  scheduleNext();
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+
+// ── COUNTDOWN ────────────────────────────────────────────────────────────────
+let nextRun=null;
+function scheduleNext(){const now=new Date(),next=new Date(now);next.setHours(8,0,0,0);if(next<=now)next.setDate(next.getDate()+1);nextRun=next;}
+function startCountdown(){
+  scheduleNext();
+  setInterval(()=>{
+    if(!nextRun)return;
+    const diff=nextRun-Date.now();
+    if(diff<=0){scheduleNext();return;}
+    const h=String(Math.floor(diff/3600000)).padStart(2,'0');
+    const m=String(Math.floor((diff%3600000)/60000)).padStart(2,'0');
+    const s=String(Math.floor((diff%60000)/1000)).padStart(2,'0');
+    const el=document.getElementById('countdown');
+    if(el) el.textContent=`${h}:${m}:${s}`;
+  },1000);
+}
+
+// ── AGENT TOOLS ──────────────────────────────────────────────────────────────
+const AGENT_TOOLS=[
+  {name:'mover_vaga',description:'Move uma vaga para outra etapa do Kanban.',input_schema:{type:'object',properties:{vaga_id:{type:'number'},nova_coluna:{type:'string',enum:COLS.map(c=>c.id)}},required:['vaga_id','nova_coluna']}},
+  {name:'criar_vaga',description:'Cria uma nova vaga na etapa Vaga Aberta.',input_schema:{type:'object',properties:{cargo:{type:'string'},departamento:{type:'string'},nivel:{type:'string'},prioridade:{type:'string',enum:['alta','media','baixa']},modalidade:{type:'string',enum:['remote','hybrid','onsite']},gestor:{type:'string'},prazo:{type:'string'}},required:['cargo','departamento','nivel','prioridade','modalidade']}},
+  {name:'atualizar_candidatos',description:'Atualiza o número de candidatos de uma vaga.',input_schema:{type:'object',properties:{vaga_id:{type:'number'},candidatos:{type:'number'}},required:['vaga_id','candidatos']}},
+  {name:'congelar_vaga',description:'Move uma vaga para Congelada/Cancelada.',input_schema:{type:'object',properties:{vaga_id:{type:'number'}},required:['vaga_id']}},
+  {name:'mover_vagas_em_lote',description:'Move todas as vagas de uma coluna para outra.',input_schema:{type:'object',properties:{coluna_origem:{type:'string',enum:COLS.map(c=>c.id)},coluna_destino:{type:'string',enum:COLS.map(c=>c.id)}},required:['coluna_origem','coluna_destino']}},
+  {name:'calcular_metricas',description:'Calcula e retorna métricas do pipeline.',input_schema:{type:'object',properties:{}}},
+  {name:'identificar_gargalos',description:'Analisa e retorna os gargalos do pipeline.',input_schema:{type:'object',properties:{}}},
+];
+
+function executeTool(name,input){
+  const actions=[];
+  if(name==='mover_vaga'){const c=cards.find(x=>x.id===input.vaga_id);if(c){const f=COLS.find(x=>x.id===c.col),t=COLS.find(x=>x.id===input.nova_coluna);actions.push({icon:'🔄',text:`<strong>${c.role}</strong> → <strong>${t?.label}</strong> (era ${f?.label})`});c.col=input.nova_coluna;c.updatedAt=new Date().toISOString();c.daysInStage=0;}else actions.push({icon:'⚠️',text:`Vaga ID ${input.vaga_id} não encontrada.`});}
+  else if(name==='criar_vaga'){const card={id:nextId++,role:input.cargo,dept:input.departamento,level:input.nivel,priority:input.prioridade,mode:input.modalidade,manager:input.gestor||'—',deadline:input.prazo||new Date(Date.now()+30*86400000).toISOString().split('T')[0],col:'vaga-aberta',candidates:0,updatedAt:new Date().toISOString(),daysInStage:0};cards.unshift(card);actions.push({icon:'✅',text:`Vaga criada: <strong>${card.role}</strong> (${card.dept}, ${card.level})`});}
+  else if(name==='atualizar_candidatos'){const c=cards.find(x=>x.id===input.vaga_id);if(c){c.candidates=input.candidatos;c.updatedAt=new Date().toISOString();actions.push({icon:'👥',text:`<strong>${c.role}</strong>: ${input.candidatos} candidatos`});}}
+  else if(name==='congelar_vaga'){const c=cards.find(x=>x.id===input.vaga_id);if(c){c.col='congelada';c.updatedAt=new Date().toISOString();actions.push({icon:'❄️',text:`<strong>${c.role}</strong> congelada`});}}
+  else if(name==='mover_vagas_em_lote'){const list=cards.filter(x=>x.col===input.coluna_origem);const f=COLS.find(x=>x.id===input.coluna_origem),t=COLS.find(x=>x.id===input.coluna_destino);list.forEach(c=>{c.col=input.coluna_destino;c.updatedAt=new Date().toISOString();c.daysInStage=0;});actions.push({icon:'📦',text:`<strong>${list.length} vagas</strong>: <strong>${f?.label}</strong> → <strong>${t?.label}</strong>`});}
+  else if(name==='calcular_metricas'||name==='identificar_gargalos'){const m=calcMetrics();if(name==='calcular_metricas')actions.push({icon:'📊',text:`Ativas: ${m.active.length} · Pipeline: ${m.inPipeline.length} · Contratadas: ${m.hired.length} · Atrasadas: ${m.stale.length} · ${m.avgDays}d médios · ${m.convRate}% conversão`});else actions.push({icon:'🚧',text:m.bottlenecks.length?m.bottlenecks.map(b=>`<strong>${b.col.label}</strong>: ${b.cc.length}v, ${b.avgD}d médios`).join(' · '):'Nenhum gargalo crítico.'});}
+  return actions;
+}
+
+// ── CHAT ─────────────────────────────────────────────────────────────────────
+let chatHistory=[], isThinking=false;
+
+function addMsg(role,content,actions=[]){
+  const msgs=document.getElementById('messages');
+  const div=document.createElement('div');
+  div.className=`msg msg-${role}`;
+  const now=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const actHTML=actions.length?`<div class="action-log">${actions.map(a=>`<div class="action-item"><span class="action-icon">${a.icon}</span><span class="action-text">${a.text}</span></div>`).join('')}</div>`:'';
+  div.innerHTML=`<div class="msg-bubble">${content}${actHTML}</div><div class="msg-meta">${now}</div>`;
+  msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
+}
+function addThinking(){const msgs=document.getElementById('messages');const div=document.createElement('div');div.className='msg msg-agent';div.id='thinking-msg';div.innerHTML=`<div class="msg-bubble thinking"><div class="think-dots"><div class="td"></div><div class="td"></div><div class="td"></div></div>&nbsp;Analisando...</div>`;msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;}
+function removeThinking(){const el=document.getElementById('thinking-msg');if(el)el.remove();}
+function setStatus(state,text){document.getElementById('sdot').className='sdot '+state;document.getElementById('stext').textContent=text;}
+
+async function sendMessage(){
+  const input=document.getElementById('chat-input');
+  const text=input.value.trim();
+  if(!text||isThinking)return;
+  input.value=''; input.style.height='';
+  addMsg('user',text);
+  chatHistory.push({role:'user',content:text});
+  isThinking=true; document.getElementById('send-btn').disabled=true;
+  setStatus('thinking','Processando...'); addThinking();
+
+  const m=calcMetrics();
+  const systemPrompt=`Você é um agente inteligente de Recrutamento & Seleção com 5 responsabilidades:
+1. LER a base de vagas — conhecer todos os dados do pipeline
+2. ATUALIZAR o Kanban — mover vagas, sinalizar atrasos, criar novas vagas
+3. CALCULAR métricas — tempo médio por etapa, taxa de conversão, SLA, eficiência
+4. IDENTIFICAR gargalos — etapas com excesso de vagas ou alto tempo de permanência
+5. GERAR relatórios — sínteses executivas periódicas com recomendações
+
+ESTADO ATUAL DO KANBAN:
+${JSON.stringify(COLS.map(c=>({coluna:c.label,colId:c.id,vagas:cards.filter(x=>x.col===c.id).map(x=>({id:x.id,cargo:x.role,dept:x.dept,nivel:x.level,prioridade:x.priority,modalidade:modeMap[x.mode],gestor:x.manager,prazo:fmtDate(x.deadline),candidatos:x.candidates,dias_na_etapa:x.daysInStage}))})),null,2)}
+
+MÉTRICAS: ${m.active.length} ativas · ${m.inPipeline.length} pipeline · ${m.hired.length} contratadas · ${m.stale.length} atrasadas · ${m.avgDays}d médios · ${m.convRate}% conversão · ${m.urgency.length} com prazo crítico
+GARGALOS: ${m.bottlenecks.map(b=>b.col.label+'('+b.avgD+'d, '+b.cc.length+'v)').join(', ')||'nenhum crítico'}
+
+Responda em português. Seja conciso (máx 3-4 frases). Use ferramentas para executar ações. Dê insights acionáveis.`;
+
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:systemPrompt,tools:AGENT_TOOLS,messages:chatHistory})});
+    const data=await res.json();
+    removeThinking();
+    let allActions=[],textResponse='';
+    if(data.content){
+      for(const block of data.content){
+        if(block.type==='text') textResponse=block.text;
+        if(block.type==='tool_use'){allActions.push(...executeTool(block.name,block.input));}
+      }
+      if(allActions.length&&!textResponse){
+        chatHistory.push({role:'assistant',content:data.content});
+        const tr=data.content.filter(b=>b.type==='tool_use').map(b=>({type:'tool_result',tool_use_id:b.id,content:'Executado.'}));
+        chatHistory.push({role:'user',content:tr});
+        const fu=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,system:systemPrompt,messages:chatHistory})});
+        const fd=await fu.json();
+        textResponse=fd.content?.find(b=>b.type==='text')?.text||'Ações executadas!';
+        chatHistory.push({role:'assistant',content:fd.content});
+      }else{chatHistory.push({role:'assistant',content:data.content});}
+    }
+    if(!textResponse) textResponse='Pronto! Confira o Kanban atualizado.';
+    addMsg('agent',textResponse,allActions);
+    if(allActions.length){
+      renderBoard();
+      setTimeout(()=>{cards.filter(c=>c.daysInStage===0&&daysSince(c.updatedAt)===0).forEach(c=>{const el=document.getElementById(`card-${c.id}`);if(el){el.classList.add('agent-updated');setTimeout(()=>el.classList.remove('agent-updated'),2000);}})},100);
+      showToast('🤖',`${allActions.length} ação${allActions.length>1?'ões':''} executada${allActions.length>1?'s':''}`);
+    }
+    setStatus('active','Agente ativo');
+  }catch(e){
+    removeThinking();
+    addMsg('agent',`Erro ao conectar com o agente: ${e.message}`);
+    setStatus('active','Agente ativo');
+  }
+  isThinking=false; document.getElementById('send-btn').disabled=false;
+  document.getElementById('chat-input').focus();
+}
+function sendQuick(text){document.getElementById('chat-input').value=text;sendMessage();}
+function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}
+function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,90)+'px';}
+
+let toastTimer;
+function showToast(icon,msg){clearTimeout(toastTimer);document.getElementById('toast-icon').textContent=icon;document.getElementById('toast-msg').textContent=msg;const t=document.getElementById('toast');t.classList.add('show');toastTimer=setTimeout(()=>t.classList.remove('show'),3500);}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+renderBoard();
+startCountdown();
+setTimeout(()=>{
+  const m=calcMetrics();
+  addMsg('agent',
+    `👋 Olá! Sou seu <strong>Agente de Recrutamento</strong> com 5 responsabilidades automáticas:<br><br>`+
+    `<strong>1️⃣ Ler base</strong> · <strong>2️⃣ Atualizar Kanban</strong> · <strong>3️⃣ Calcular métricas</strong> · <strong>4️⃣ Identificar gargalos</strong> · <strong>5️⃣ Gerar relatório</strong><br><br>`+
+    `📊 Agora: <strong>${m.active.length}</strong> ativas · <strong>${m.inPipeline.length}</strong> em seleção · <strong>${m.totalCands}</strong> candidatos · <strong>${m.convRate}%</strong> conversão`+
+    (m.stale.length>0?`<br>⚠️ <strong>${m.stale.length} vaga${m.stale.length>1?'s':''}</strong> com +7 dias sem movimentação.`:'<br>✅ Nenhum atraso crítico.')+
+    `<br><br>Clique em <strong>▶ Rodar agora</strong> para o ciclo diário completo.`
+  );
+},300);
+
+// ── GOOGLE SHEETS INTEGRATION ─────────────────────────────────────────────────
+let sheetsConfig = null;
+let sheetsTimer  = null;
+
+const ETAPA_MAP = {
+  'vaga aberta':'vaga-aberta','aberta':'vaga-aberta','nova':'vaga-aberta',
+  'vaga aprovada':'vaga-aprovada','aprovada':'vaga-aprovada','aprovado':'vaga-aprovada',
+  'divulgacao':'divulgacao','divulgação':'divulgacao','hunting':'divulgacao','divulgação/hunting':'divulgacao',
+  'triagem':'triagem','triagem de curriculos':'triagem','triagem de currículos':'triagem',
+  'entrevista rh':'entrevista-rh','rh':'entrevista-rh',
+  'entrevista gestor':'entrevista-gestor','gestor':'entrevista-gestor',
+  'avaliacao tecnica':'avaliacao-tecnica','avaliação técnica':'avaliacao-tecnica','tecnica':'avaliacao-tecnica','técnica':'avaliacao-tecnica',
+  'entrevista par':'entrevista-par','par':'entrevista-par',
+  'bar raiser':'bar-raiser',
+  'comite':'comite','comitê':'comite',
+  'proposta':'proposta',
+  'contratacao':'contratacao','contratação':'contratacao','contratado':'contratacao','hired':'contratacao',
+  'congelada':'congelada','cancelada':'congelada','pausada':'congelada',
+};
+const PRIORITY_MAP = {'alta':'alta','high':'alta','urgente':'alta','media':'media','média':'media','medium':'media','normal':'media','baixa':'baixa','low':'baixa'};
+const MODE_MAP = {'remoto':'remote','remote':'remote','home office':'remote','híbrido':'hybrid','hibrido':'hybrid','hybrid':'hybrid','presencial':'onsite','onsite':'onsite'};
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return null;
+  const parseRow = row => {
+    const result = []; let cur = ''; let inQ = false;
+    for (let i = 0; i < row.length; i++) {
+      const ch = row[i];
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+    result.push(cur.trim());
+    return result;
+  };
+  const headers = parseRow(lines[0]).map(h => h.toLowerCase().replace(/["\u201c\u201d]/g,'').trim());
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseRow(lines[i]);
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = (vals[idx] || '').replace(/^"|"$/g,'').trim(); });
+    rows.push(row);
+  }
+  return { headers, rows };
+}
+
+function parseDeadline(val) {
+  if (!val) return '';
+  const pt = val.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (pt) return `${pt[3]}-${pt[2]}-${pt[1]}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  const d = new Date(val);
+  if (!isNaN(d)) return d.toISOString().split('T')[0];
+  return '';
+}
+
+function rowToCard(row, id) {
+  const g = (...keys) => { for (const k of keys) { if (row[k] !== undefined && row[k] !== '') return row[k]; } return ''; };
+  const rawRole = g('cargo','função','funcao','vaga','role') || Object.values(row)[0] || 'Sem título';
+  const rawCol  = g('etapa','fase','coluna','status') || 'vaga aberta';
+  const rawPri  = g('prioridade','priority') || 'media';
+  const rawMode = g('modalidade','mode','formato','modelo') || 'hibrido';
+  return {
+    id, role: rawRole,
+    dept:       g('departamento','dept','área','area','time') || '—',
+    level:      g('nivel','nível','senioridade','sênioridade') || 'Pleno',
+    priority:   PRIORITY_MAP[rawPri.toLowerCase()] || 'media',
+    mode:       MODE_MAP[rawMode.toLowerCase()] || 'hybrid',
+    manager:    g('gestor','responsável','responsavel','hiring manager') || '—',
+    deadline:   parseDeadline(g('prazo','data limite','data')),
+    col:        ETAPA_MAP[rawCol.toLowerCase().trim()] || 'vaga-aberta',
+    candidates: parseInt(g('candidatos','nº candidatos','num candidatos')) || 0,
+    updatedAt:  new Date().toISOString(),
+    daysInStage: 0,
+    fromSheets: true,
+  };
+}
+
+async function syncFromSheets(manual = false) {
+  if (!sheetsConfig) return;
+  const dot = document.getElementById('sheets-dot');
+  const syncBtn = document.querySelector('.sheets-sync-btn');
+  dot.className = 'sheets-dot syncing';
+  if (syncBtn) syncBtn.textContent = '⏳ Sincronizando...';
+  if (manual) setStatus('running', 'Sincronizando planilha...');
+
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(sheetsConfig.url)}`;
+  try {
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error('Não foi possível acessar a planilha.');
+    const json = await res.json();
+    const csvText = json.contents;
+    if (!csvText || csvText.trim().length < 5) throw new Error('Planilha vazia ou inacessível.');
+    const parsed = parseCSV(csvText);
+    if (!parsed || !parsed.rows.length) throw new Error('Nenhuma linha de dados encontrada.');
+
+    let importedCount = 0;
+    let removedCount  = 0;
+    const newCardIds  = [];   // IDs of brand-new cards → highlight
+    const sheetIds    = new Set();
+
+    // ── 1. UPSERT: add new / update existing ─────────────────────────────────
+    parsed.rows.forEach((row) => {
+      const tempCard = rowToCard(row, null);
+      if (!tempCard.role || tempCard.role === 'Sem título') return;
+
+      const existing = cards.find(c =>
+        c.role.toLowerCase() === tempCard.role.toLowerCase() &&
+        c.dept.toLowerCase() === tempCard.dept.toLowerCase()
+      );
+
+      if (existing) {
+        Object.assign(existing, {
+          level:      tempCard.level      || existing.level,
+          priority:   tempCard.priority   || existing.priority,
+          mode:       tempCard.mode       || existing.mode,
+          manager:    tempCard.manager    || existing.manager,
+          deadline:   tempCard.deadline   || existing.deadline,
+          candidates: tempCard.candidates ?? existing.candidates,
+          col: tempCard.col !== 'vaga-aberta' ? tempCard.col : existing.col,
+          fromSheets: true,
+        });
+        sheetIds.add(existing.id);
+      } else {
+        // ── NEW CARD ──────────────────────────────────────────────────────────
+        const nc = rowToCard(row, nextId++);
+        nc.isNew = true;   // flag for highlight
+        cards.push(nc);
+        sheetIds.add(nc.id);
+        newCardIds.push(nc.id);
+        importedCount++;
+      }
+    });
+
+    // ── 2. REMOVE cards that no longer exist in the sheet ────────────────────
+    const removedCards = cards.filter(c => c.fromSheets && !sheetIds.has(c.id));
+    removedCards.forEach(c => { removedCount++; });
+    // Actually delete them from the array
+    if (removedCards.length) {
+      removedCards.forEach(rc => {
+        const idx = cards.findIndex(c => c.id === rc.id);
+        if (idx !== -1) cards.splice(idx, 1);
+      });
+    }
+
+    // ── 3. UPDATE UI ─────────────────────────────────────────────────────────
+    const now = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    document.getElementById('sheets-last-sync').textContent =
+      `Última sync: ${now} · ${parsed.rows.length} vagas`;
+    dot.className = 'sheets-dot';
+    if (syncBtn) syncBtn.textContent = '↻ Sincronizar agora';
+
+    renderBoard();
+
+    // ── 4. HIGHLIGHT new cards (green pulse for 4 s) ─────────────────────────
+    if (newCardIds.length) {
+      setTimeout(() => {
+        newCardIds.forEach(id => {
+          const el = document.getElementById(`card-${id}`);
+          if (el) {
+            el.style.transition = 'box-shadow 0.3s, border-color 0.3s';
+            el.style.borderColor = '#16a34a';
+            el.style.boxShadow   = '0 0 0 3px rgba(22,163,74,0.25), 0 4px 16px rgba(22,163,74,0.15)';
+            // small NEW badge
+            const badge = document.createElement('span');
+            badge.textContent = 'NOVA';
+            badge.style.cssText = 'position:absolute;top:6px;right:6px;font-size:8px;font-weight:700;letter-spacing:0.5px;background:#16a34a;color:#fff;padding:2px 5px;border-radius:3px;z-index:2';
+            el.appendChild(badge);
+            // fade out after 4 s
+            setTimeout(() => {
+              el.style.borderColor = '';
+              el.style.boxShadow   = '';
+              badge.style.transition = 'opacity 0.5s';
+              badge.style.opacity = '0';
+              setTimeout(() => badge.remove(), 500);
+            }, 4000);
+          }
+        });
+      }, 120);
+    }
+
+    // ── 5. CHAT NOTIFICATION (always, if anything changed) ───────────────────
+    const hasChanges = importedCount > 0 || removedCount > 0;
+    if (manual || hasChanges) {
+      setStatus('active', 'Agente ativo');
+
+      const actionItems = [];
+
+      if (importedCount > 0) {
+        const newNames = newCardIds
+          .map(id => cards.find(c => c.id === id))
+          .filter(Boolean)
+          .map(c => `<strong>${c.role}</strong> (${c.dept})`)
+          .join(', ');
+        actionItems.push({
+          icon: '🟢',
+          text: `${importedCount} vaga${importedCount > 1 ? 's novas adicionadas' : ' nova adicionada'}: ${newNames}`
+        });
+      }
+
+      if (removedCount > 0) {
+        actionItems.push({
+          icon: '🗑️',
+          text: `${removedCount} vaga${removedCount > 1 ? 's removidas' : ' removida'} do Kanban (não encontrada${removedCount > 1 ? 's' : ''} na planilha)`
+        });
+      }
+
+      if (!hasChanges) {
+        actionItems.push({ icon: '✅', text: `Nenhuma alteração detectada · ${parsed.rows.length} vagas em dia` });
+      }
+
+      const summary = hasChanges
+        ? `📗 <strong>Planilha sincronizada</strong> — ${importedCount > 0 ? `${importedCount} nova${importedCount > 1 ? 's' : ''}` : ''}${importedCount > 0 && removedCount > 0 ? ' · ' : ''}${removedCount > 0 ? `${removedCount} removida${removedCount > 1 ? 's' : ''}` : ''}.`
+        : `📗 <strong>Planilha sincronizada</strong> — nenhuma alteração. ${parsed.rows.length} vagas atualizadas.`;
+
+      addMsg('agent', summary, actionItems);
+
+      if (importedCount > 0)
+        showToast('🟢', `${importedCount} nova${importedCount > 1 ? 's vagas adicionadas' : ' vaga adicionada'} da planilha`);
+      else if (removedCount > 0)
+        showToast('🗑️', `${removedCount} vaga${removedCount > 1 ? 's removidas' : ' removida'} do Kanban`);
+      else if (manual)
+        showToast('📗', `Planilha sincronizada · sem alterações`);
+    }
+
+  } catch (err) {
+    dot.className = 'sheets-dot error';
+    if (syncBtn) syncBtn.textContent = '↻ Sincronizar agora';
+    if (manual) {
+      setStatus('active', 'Agente ativo');
+      addMsg('agent', `❌ <strong>Erro ao sincronizar:</strong> ${err.message}`);
+      showToast('❌', 'Erro na sincronização');
+    }
+  }
+}
+
+function openSheetsModal() {
+  if (sheetsConfig) {
+    document.getElementById('sheets-url-input').value = sheetsConfig.url;
+    document.getElementById('sheets-interval').value = String(sheetsConfig.interval);
+  }
+  document.getElementById('sheets-test-result').style.display = 'none';
+  document.getElementById('sheets-modal').classList.add('open');
+}
+function closeSheetsModal() { document.getElementById('sheets-modal').classList.remove('open'); }
+function handleModalClick(e) { if (e.target === document.getElementById('sheets-modal')) closeSheetsModal(); }
+
+function showTestResult(type, html) {
+  const el = document.getElementById('sheets-test-result');
+  const c = {
+    success:{bg:'#f0fdf4',border:'rgba(22,163,74,0.25)',text:'#15803d'},
+    error:  {bg:'#fef2f2',border:'rgba(220,38,38,0.25)',text:'#b91c1c'},
+    warn:   {bg:'#fffbeb',border:'rgba(217,119,6,0.25)',text:'#b45309'},
+    loading:{bg:'#f0f4ff',border:'rgba(59,110,245,0.2)',text:'#3b6ef5'},
+  }[type] || {bg:'#f0f4ff',border:'rgba(59,110,245,0.2)',text:'#3b6ef5'};
+  el.style.cssText = `display:block;padding:10px 13px;border-radius:8px;font-size:12px;margin-top:10px;background:${c.bg};border:1px solid ${c.border};color:${c.text}`;
+  el.innerHTML = html;
+}
+
+async function testConnection() {
+  const url = document.getElementById('sheets-url-input').value.trim();
+  if (!url) { showTestResult('error','⚠️ Cole o link CSV antes de testar.'); return; }
+  showTestResult('loading','🔄 Testando conexão com a planilha...');
+  try {
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const r = await fetch(proxyUrl);
+    if (!r.ok) throw new Error('Não foi possível acessar a URL.');
+    const j = await r.json();
+    if (!j.contents || j.contents.trim().length < 5) throw new Error('Resposta vazia.');
+    const parsed = parseCSV(j.contents);
+    if (!parsed) throw new Error('Formato inválido.');
+    showTestResult('success', `✅ Conexão OK! <strong>${parsed.rows.length} linha${parsed.rows.length!==1?'s':''}</strong> encontrada${parsed.rows.length!==1?'s':''}. Colunas: <strong>${parsed.headers.slice(0,6).join(', ')}${parsed.headers.length>6?'…':''}</strong>`);
+  } catch(e) { showTestResult('error', `❌ ${e.message}`); }
+}
+
+async function saveSheets() {
+  const url = document.getElementById('sheets-url-input').value.trim();
+  if (!url) { showTestResult('error','⚠️ Cole o link CSV da planilha.'); return; }
+  const interval = parseInt(document.getElementById('sheets-interval').value);
+  let name = 'Planilha de Vagas';
+  const m = url.match(/spreadsheets\/d\/([^/]+)/);
+  if (m) name = `Planilha (${m[1].slice(0,8)}…)`;
+  sheetsConfig = { url, name, interval };
+  document.getElementById('sheets-bar').classList.add('visible');
+  document.getElementById('sheets-name').textContent = name;
+  document.getElementById('btn-connect').classList.add('connected');
+  document.getElementById('connect-label').textContent = '📗 Conectado';
+  if (sheetsTimer) { clearInterval(sheetsTimer); sheetsTimer = null; }
+  if (interval > 0) sheetsTimer = setInterval(() => syncFromSheets(false), interval * 60 * 1000);
+  closeSheetsModal();
+  await syncFromSheets(true);
+}
+
+function downloadTemplate(e) {
+  e.preventDefault();
+  const csv = [
+    'cargo,departamento,nivel,prioridade,modalidade,gestor,prazo,etapa,candidatos',
+    'Engenheiro(a) de Software Sênior,Engenharia,Sênior,alta,remoto,Carlos Mendes,2025-06-30,Entrevista RH,3',
+    'Product Designer,Produto,Pleno,media,hibrido,Ana Lima,2025-07-15,Triagem Currículos,5',
+    'Analista de Dados,Data & Analytics,Pleno,alta,remoto,Rafael Costa,2025-06-15,Vaga Aberta,0',
+    'DevOps Engineer,Infraestrutura,Sênior,alta,remoto,Thiago Ferreira,2025-06-20,Vaga Aprovada,0',
+    'UX Researcher,Produto,Pleno,media,remoto,Camila Dias,2025-07-01,Divulgação/Hunting,8',
+  ].join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'modelo-vagas-kanban.csv';
+  link.click();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheetsModal(); });
+
+</script>
+</body>
+</html>
